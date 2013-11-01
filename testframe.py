@@ -9,8 +9,11 @@ from pybrain.supervised.trainers import BackpropTrainer
 from numpy.random                import multivariate_normal
 from numpy.linalg                import det
 from sklearn.metrics             import mean_squared_error
+from sklearn.cluster             import KMeans
 from scipy                       import diag, arange, meshgrid, where
+from scipy.spatial.distance      import pdist
 
+import copy
 import math
 import random
 
@@ -32,15 +35,22 @@ class NeuralNet(object):
     net.addConnection(hidden_to_out)
 
     net.sortModules()
-    self.neural_net = net
-    self.in_dim     = in_size
-    self.out_dim    = out_size
+    self.neural_net   = net
+    self.k_neural_net = copy.deepcopy(net)
+    self.in_dim       = in_size
+    self.out_dim      = out_size
 
   def net_activate(self, data):
     return self.neural_net.activate(data)
 
+  def k_net_activate(self, data):
+    return self.k_neural_net.activate(data)
+
   def net_params(self):
     print self.neural_net.params
+
+  def k_net_params(self):
+    print self.k_neural_net.params
 
   def train_random(self, size = 10000, iters=20):
     random_data_set = RandomDataSet(self.in_dim, self.out_dim, size)
@@ -49,13 +59,21 @@ class NeuralNet(object):
     tst_data        = random_data_set.tst_data
     entro           = random_data_set.entro
 
+    random_data_set.create_kmeans_reduced_trn_data()
+    k_trn_data      = random_data_set.kmeans_trn_data
+
     trainer = BackpropTrainer(self.neural_net, dataset=trn_data, momentum=0.1, verbose=True, weightdecay=0.01)
+    k_trainer = BackpropTrainer(self.k_neural_net, dataset=k_trn_data, momentum=0.1, verbose=True, weightdecay=0.01)
 
     for i in range(iters):
-      trainer.trainEpochs(5)
-      self.rmse_evaluation(tst_data, entro)
+      trainer.trainEpochs(1)
+      k_trainer.trainEpochs(1)
 
-    self.trainer = trainer
+      self.rmse_evaluation(tst_data, entro)
+      self.k_rmse_evaluation(tst_data, entro)
+
+    self.trainer   = trainer
+    self.k_trainer = k_trainer
 
   def rmse_evaluation(self, tst_data, entropy):
     true_values = tst_data['target']
@@ -72,6 +90,22 @@ class NeuralNet(object):
     print "RMSE: " + str(rmse)
     print "Normalized RMSE: " + str(normalized_rmse)
 
+  def k_rmse_evaluation(self, tst_data, entropy):
+
+    true_values = tst_data['target']
+    pred_values = []
+
+    for ind in xrange(len(tst_data['target'])):
+      pred = self.k_net_activate(tst_data['input'][ind])
+      pred_values.append(pred)
+
+    mse  = mean_squared_error(true_values, pred_values)
+    rmse = math.sqrt(mse)
+    normalized_rmse = rmse / entropy
+
+    print "KRMSE: " + str(rmse)
+    print "Normalized KRMSE: " + str(normalized_rmse)
+
 class RandomDataSet(object):
   def __init__(self, in_dim, out_dim, size = 10000, means = None, covas = None):
     if means == None or covas == None:
@@ -87,6 +121,9 @@ class RandomDataSet(object):
         ### randomCovas
         size_value = 3
         covas.append(random.random()*size_value)
+
+    self.in_dim  = in_dim
+    self.out_dim = out_dim
 
     means = tuple(means)
     covas = diag(covas)
@@ -113,23 +150,31 @@ class RandomDataSet(object):
     self.tst_data = tst_data
     self.trn_data = trn_data
 
+  def create_kmeans_reduced_trn_data(self, k_clusters = 750):
+    kmeans = KMeans(n_clusters = k_clusters)
+    kmeans.fit(self.trn_data['input'])
 
+    centroids = kmeans.cluster_centers_
+    kmeans_trn_data_x = []
+    kmeans_trn_data_y = []
 
+    for centroid in centroids:
+      min_pdist = float("+inf")
+      min_index = 0
+      for ind in xrange(len(self.trn_data['input'])):
+        L2norm = pdist([centroid,self.trn_data['input'][ind]])
+        if L2norm < min_pdist:
+          min_pdist = L2norm
+          min_index = ind
+      kmeans_trn_data_x.append(copy.deepcopy(self.trn_data['input'][ind]))
+      kmeans_trn_data_y.append(copy.deepcopy(self.trn_data['target'][ind]))
 
+    kmeans_trn_data = SupervisedDataSet(self.in_dim, self.out_dim)
+    for n in xrange(k_clusters):
+      kmeans_trn_data.addSample(kmeans_trn_data_x[n], kmeans_trn_data_y[n])
 
+    self.kmeans_trn_data = kmeans_trn_data
 
-# class DataSet(object):
-#   def __init__(self, in_data, out_data):
-#     train_set = SupervisedDataSet(len(in_data[0]), len(out_data[0]))
-#     test_set  = SupervisedDataSet(len(in_data[0]), len(out_data[0]))
-#     for ind in xrange(len(in_data)):
-#       if ind % 5 == 0:
-#         test_set.appendLinked(in_data[ind], out_data[ind])
-#       else:
-#         train_set.appendLinked(in_data[ind], out_data[ind])
-
-#     self.train_set = train_set
-#     self.test_set  = test_set
 
 
 
