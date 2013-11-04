@@ -24,6 +24,7 @@ class NeuralNet(object):
     hidden_layer  = TanhLayer(hidden_size)
     out_layer     = LinearLayer(out_size)
 
+    print "creating full data neural net..."
     net.addInputModule(in_layer)
     net.addModule(hidden_layer)
     net.addOutputModule(out_layer)
@@ -34,6 +35,7 @@ class NeuralNet(object):
     net.addConnection(in_to_hidden)
     net.addConnection(hidden_to_out)
 
+    print "creating partial data neural net..."
     net.sortModules()
     self.neural_net   = net
     self.k_neural_net = copy.deepcopy(net)
@@ -62,7 +64,9 @@ class NeuralNet(object):
     random_data_set.create_kmeans_reduced_trn_data()
     k_trn_data      = random_data_set.kmeans_trn_data
 
+    print "training on complete data set..."
     trainer = BackpropTrainer(self.neural_net, dataset=trn_data, momentum=0.1, verbose=True, weightdecay=0.01)
+    print "training on kmeans reduced data set..."
     k_trainer = BackpropTrainer(self.k_neural_net, dataset=k_trn_data, momentum=0.1, verbose=True, weightdecay=0.01)
 
     for i in range(iters):
@@ -87,8 +91,8 @@ class NeuralNet(object):
     rmse = math.sqrt(mse)
     normalized_rmse = rmse / entropy
 
-    print "RMSE: " + str(rmse)
-    print "Normalized RMSE: " + str(normalized_rmse)
+    print "            RMSE: " + str(rmse)
+    print "Normalized  RMSE: " + str(normalized_rmse)
 
   def k_rmse_evaluation(self, tst_data, entropy):
 
@@ -103,7 +107,7 @@ class NeuralNet(object):
     rmse = math.sqrt(mse)
     normalized_rmse = rmse / entropy
 
-    print "KRMSE: " + str(rmse)
+    print "           KRMSE: " + str(rmse)
     print "Normalized KRMSE: " + str(normalized_rmse)
 
 class RandomDataSet(object):
@@ -144,21 +148,38 @@ class RandomDataSet(object):
         out_datum.append(val)
       all_data.addSample(in_datum,out_datum)
 
-    tst_data, trn_data = all_data.splitWithProportion(0.25)
 
+    split_proportion   = 0.25
+    tst_data, trn_data = all_data.splitWithProportion(split_proportion)
+
+    self.tot_size = size
     self.all_data = all_data
     self.tst_data = tst_data
     self.trn_data = trn_data
 
-  def create_kmeans_reduced_trn_data(self, k_clusters = 750):
+    self.split_proportion = split_proportion
+
+
+
+  #total error is the same each time, perhaps need to do this step before creating SupervisedDataSet
+  def create_kmeans_reduced_trn_data(self, k_reduction = 0.80):
+    k_clusters = int(self.tot_size * k_reduction * (float(1) - self.split_proportion))
+
     kmeans = KMeans(n_clusters = k_clusters)
     kmeans.fit(self.trn_data['input'])
-
+    print "fitting data with kmeans..."
     centroids = kmeans.cluster_centers_
     kmeans_trn_data_x = []
     kmeans_trn_data_y = []
 
+    print "finding closest point to each centroid..."
+    centroid_count = 0
     for centroid in centroids:
+
+      centroid_count += 1
+      if centroid_count % (k_clusters / 20) == 0:
+        print "completed "+str(100.0 * float(centroid_count) / float(k_clusters))+"% of search..."
+
       min_pdist = float("+inf")
       min_index = 0
       for ind in xrange(len(self.trn_data['input'])):
@@ -169,6 +190,7 @@ class RandomDataSet(object):
       kmeans_trn_data_x.append(copy.deepcopy(self.trn_data['input'][ind]))
       kmeans_trn_data_y.append(copy.deepcopy(self.trn_data['target'][ind]))
 
+    print "creating reduced kmeans dataset..."
     kmeans_trn_data = SupervisedDataSet(self.in_dim, self.out_dim)
     for n in xrange(k_clusters):
       kmeans_trn_data.addSample(kmeans_trn_data_x[n], kmeans_trn_data_y[n])
