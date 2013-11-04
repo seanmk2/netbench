@@ -19,26 +19,43 @@ import random
 
 class NeuralNet(object):
   def __init__(self, in_size, hidden_size, out_size):
-    net           = FeedForwardNetwork()
-    in_layer      = LinearLayer(in_size)
-    hidden_layer  = TanhLayer(hidden_size)
-    out_layer     = LinearLayer(out_size)
+    net             = FeedForwardNetwork()
+    in_layer        = LinearLayer(in_size)
+    hidden_layer    = TanhLayer(hidden_size)
+    out_layer       = LinearLayer(out_size)
+
+    k_net           = FeedForwardNetwork()
+    k_in_layer      = LinearLayer(in_size)
+    k_hidden_layer  = TanhLayer(hidden_size)
+    k_out_layer     = LinearLayer(out_size)
 
     print "creating full data neural net..."
     net.addInputModule(in_layer)
     net.addModule(hidden_layer)
     net.addOutputModule(out_layer)
 
+    k_net.addInputModule(k_in_layer)
+    k_net.addModule(k_hidden_layer)
+    k_net.addOutputModule(k_out_layer)
+
     in_to_hidden  = FullConnection(in_layer, hidden_layer)
     hidden_to_out = FullConnection(hidden_layer, out_layer)
+
+    k_in_to_hidden  = FullConnection(k_in_layer, k_hidden_layer)
+    k_hidden_to_out = FullConnection(k_hidden_layer, k_out_layer)
 
     net.addConnection(in_to_hidden)
     net.addConnection(hidden_to_out)
 
+    k_net.addConnection(k_in_to_hidden)
+    k_net.addConnection(k_hidden_to_out)
+
     print "creating partial data neural net..."
     net.sortModules()
+    k_net.sortModules()
+
     self.neural_net   = net
-    self.k_neural_net = copy.deepcopy(net)
+    self.k_neural_net = k_net
     self.in_dim       = in_size
     self.out_dim      = out_size
 
@@ -64,14 +81,32 @@ class NeuralNet(object):
     random_data_set.create_kmeans_reduced_trn_data()
     k_trn_data      = random_data_set.kmeans_trn_data
 
+    ### DEBUG: may need to check if k_trn_data actually is subset of trn_data
+
     print "training on complete data set..."
     trainer = BackpropTrainer(self.neural_net, dataset=trn_data, momentum=0.1, verbose=True, weightdecay=0.01)
+
+    ###
+    print "printing trn_data: "
+    print trn_data
+    print "printing len(trn_data['input'])"
+    print len(trn_data['input'])
+    ###
+
     print "training on kmeans reduced data set..."
     k_trainer = BackpropTrainer(self.k_neural_net, dataset=k_trn_data, momentum=0.1, verbose=True, weightdecay=0.01)
 
+    ###
+    print "printing k_trn_data: "
+    print k_trn_data
+    print "printing len(k_trn_data['input'])"
+    print len(k_trn_data['input'])
+    ###
+
     for i in range(iters):
-      trainer.trainEpochs(1)
-      k_trainer.trainEpochs(1)
+      print "-------------------------"
+      trainer.trainEpochs(5)
+      k_trainer.trainEpochs(5)
 
       self.rmse_evaluation(tst_data, entro)
       self.k_rmse_evaluation(tst_data, entro)
@@ -111,7 +146,7 @@ class NeuralNet(object):
     print "Normalized KRMSE: " + str(normalized_rmse)
 
 class RandomDataSet(object):
-  def __init__(self, in_dim, out_dim, size = 10000, means = None, covas = None):
+  def __init__(self, in_dim, out_dim, size = 1000, means = None, covas = None):
     if means == None or covas == None:
       means = []
       covas = []
@@ -162,7 +197,7 @@ class RandomDataSet(object):
 
 
   #total error is the same each time, perhaps need to do this step before creating SupervisedDataSet
-  def create_kmeans_reduced_trn_data(self, k_reduction = 0.80):
+  def create_kmeans_reduced_trn_data(self, k_reduction = 0.10):
     k_clusters = int(self.tot_size * k_reduction * (float(1) - self.split_proportion))
 
     kmeans = KMeans(n_clusters = k_clusters)
@@ -174,7 +209,18 @@ class RandomDataSet(object):
 
     print "finding closest point to each centroid..."
     centroid_count = 0
+
+    ###
+    #print "len(centroids) = " + str(len(centroids))
+    indices = []
+    ###
+
     for centroid in centroids:
+
+      ###
+      #print "printing centroid: "
+      #print centroid
+      ###
 
       centroid_count += 1
       if centroid_count % (k_clusters / 20) == 0:
@@ -187,8 +233,25 @@ class RandomDataSet(object):
         if L2norm < min_pdist:
           min_pdist = L2norm
           min_index = ind
-      kmeans_trn_data_x.append(copy.deepcopy(self.trn_data['input'][ind]))
-      kmeans_trn_data_y.append(copy.deepcopy(self.trn_data['target'][ind]))
+
+      ###
+      #print "printing index: "
+      #print min_index
+      ###
+      ###
+      # print "      ind was: " + str(ind)
+      # print "min_index was: " + str(min_index)
+      indices.append(min_index)
+      ###
+
+      kmeans_trn_data_x.append(copy.deepcopy(self.trn_data['input'][min_index]))
+      kmeans_trn_data_y.append(copy.deepcopy(self.trn_data['target'][min_index]))
+
+    ###
+    #print "len(kmeans_trn_data_x) = " + str(len(kmeans_trn_data_x))
+    #print "len(kmeans_trn_data_y) = " + str(len(kmeans_trn_data_y))
+    # print sorted(indices)
+    ###
 
     print "creating reduced kmeans dataset..."
     kmeans_trn_data = SupervisedDataSet(self.in_dim, self.out_dim)
