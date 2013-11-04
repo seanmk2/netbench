@@ -106,6 +106,7 @@ class NeuralNet(object):
     for i in range(iters):
       print "-------------------------"
       trainer.trainEpochs(5)
+      print "---"
       k_trainer.trainEpochs(5)
 
       self.rmse_evaluation(tst_data, entro)
@@ -197,7 +198,7 @@ class RandomDataSet(object):
 
 
   #total error is the same each time, perhaps need to do this step before creating SupervisedDataSet
-  def create_kmeans_reduced_trn_data(self, k_reduction = 0.10):
+  def create_kmeans_reduced_trn_data(self, k_reduction = 0.01):
     k_clusters = int(self.tot_size * k_reduction * (float(1) - self.split_proportion))
 
     kmeans = KMeans(n_clusters = k_clusters)
