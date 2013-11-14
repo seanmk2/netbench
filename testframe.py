@@ -104,6 +104,9 @@ class NeuralNet(object):
       test_data       = dataset.portion["test"]
     entro = dataset.entro
 
+    self.iters        = iters
+    self.sample_size  = dataset.tot_size
+
     self.create_net(in_size=self.in_dim,hidden_size=self.hidden_dim,out_size=self.out_dim,override=True)
     neural_trainer = BackpropTrainer(self.neural_net, dataset=training_data, momentum=0.1, verbose=True, weightdecay=0.01)
 
@@ -149,23 +152,30 @@ class NeuralNet(object):
   def generate_k_means_error_comparison(self, k_means_reductions):
     ### each pair in list is (full_data error, partial_data error)
 
-    try:
-      x_i     = [ x for x in xrange(1,len(self.error_pairs["k-means"][0])+1)]
-      y_full1 = [ y_pt[0] for y_pt in self.error_pairs["k-means"][0] ]
 
 
-      plt.hold(True)
-      plt.plot(x_i, y_full1, 'k', alpha=1.0, label='1.00')
+    x_i     = [ x for x in xrange(1,len(self.error_pairs["k-means"][0])+1)]
+    y_full1 = [ y_pt[0] for y_pt in self.error_pairs["k-means"][0] ]
 
-      for i in xrange(len(self.error_pairs)):
-        y_ = [ y_pt[1] for y_pt in self.error_pairs["k-means"][i] ]
-        plt.plot(x_i, y_, 'r', alpha=k_means_reductions[i], label=str(k_means_reductions[i]))
-      plt.legend(loc='lower left')
-      plt.ylim((0.05,0.40))
-      plt.show()
-    except:
-      return 0
-    return 0
+
+    plt.hold(True)
+    plt.plot(x_i, y_full1, 'k', alpha=1.0, label='1.00')
+
+    alpha_values = [0.20,0.40,0.60,0.80,1.00]
+
+    for i in xrange(len(self.error_pairs["k-means"])):
+      y_ = [ y_pt[1] for y_pt in self.error_pairs["k-means"][i] ]
+      plt.plot(x_i, y_, 'r', alpha=alpha_values[i], label=str(k_means_reductions[i]))
+
+    plt.legend(loc='upper right')
+    #plt.legend(bbox_to_anchor=(1.003, 1), loc=2, borderaxespad=0.)
+
+    plt.ylim(0.10,0.40)
+    plt.title("[Total Samples: "+str(self.sample_size)+"] | [Total Iterations: "+str(self.iters)+"]")
+    plt.xlabel("[Iteration #]")
+    plt.ylabel("[Total Error]")
+    plt.show()
+
 
 
 
@@ -317,7 +327,7 @@ class RandomDataSet(object):
     for centroid in centroids:
 
       centroid_count += 1
-      if centroid_count % (k_clusters / 20) == 0:
+      if centroid_count % (k_clusters / 5) == 0:
         print "completed "+str(100.0 * float(centroid_count) / float(k_clusters))+"% of search..."
 
       min_pdist = float("+inf")
