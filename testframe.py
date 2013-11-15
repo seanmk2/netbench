@@ -141,6 +141,53 @@ class NeuralNet(object):
 
 
 
+  def train_many_pca_reductions(self, dataset, portion=1.00, iters=20, pca_reductions=[ num for num in xrange(3,7) ]):
+    if portion >= 1:
+      training_data   = dataset.trn_data
+      test_data       = dataset.tst_data
+    if portion < 1:
+      dataset.get_portion(portion)
+      training_data   = dataset.portion["training"]
+      test_data       = dataset.portion["test"]
+    entro = dataset.entro
+
+    self.iters        = iters
+    self.sample_size  = dataset.tot_size
+
+    self.create_net(in_size=self.in_dim,hidden_size=self.hidden_dim,out_size=self.out_dim,override=True)
+    neural_trainer = BackpropTrainer(self.neural_net, dataset=training_data, momentum=0.1, verbose=True, weightdecay=0.01)
+
+    for reduction in pca_reductions:
+      dataset.create_pca_data(pca_dimension_target=reduction)
+      pca_training_data = dataset.pca_training_data
+
+      self.create_pca_net(reduction, override=True)
+      pca_trainer = BackpropTrainer(self.pca_net, dataset=pca_training_data, momentum=0.1, verbose=True, weightdecay=0.01)
+
+      full_pca_pair_errors = []
+
+      for i in range(iters):
+        print "Reduction: " + str(reduction) + "Dimensions of Data, Iteration " + str(i)
+
+        old_stdout   = sys.stdout            ### CAPTURE
+        capturer     = StringIO.StringIO()   ### CAPTURE
+        sys.stdout   = capturer              ### CAPTURE
+
+        #print "-------------------------"
+        neural_trainer.trainEpochs(1)
+        #print "---"
+        pca_trainer.trainEpochs(1)
+
+        sys.stdout   = old_stdout            ### CAPTURE
+        output       = capturer.getvalue()   ### CAPTURE
+        err_pair     = self.process_output_error_pair(output)
+        full_pca_pair_errors.append(err_pair)
+
+      self.error_pairs["pca"].append(full_pca_pair_errors)
+    self.generate_pca_error_comparison(pca_reductions)
+
+
+
   def process_output_error_pair(self, captured_output):
     error_out  = captured_output.split('\n')
     error_out.pop()
@@ -151,12 +198,8 @@ class NeuralNet(object):
 
   def generate_k_means_error_comparison(self, k_means_reductions):
     ### each pair in list is (full_data error, partial_data error)
-
-
-
     x_i     = [ x for x in xrange(1,len(self.error_pairs["k-means"][0])+1)]
     y_full1 = [ y_pt[0] for y_pt in self.error_pairs["k-means"][0] ]
-
 
     plt.hold(True)
     plt.plot(x_i, y_full1, 'k', alpha=1.0, label='1.00')
@@ -168,7 +211,6 @@ class NeuralNet(object):
       plt.plot(x_i, y_, 'r', alpha=alpha_values[i], label=str(k_means_reductions[i]))
 
     plt.legend(loc='upper right')
-    #plt.legend(bbox_to_anchor=(1.003, 1), loc=2, borderaxespad=0.)
 
     plt.ylim(0.10,0.40)
     plt.title("[Total Samples: "+str(self.sample_size)+"] | [Total Iterations: "+str(self.iters)+"]")
@@ -178,40 +220,29 @@ class NeuralNet(object):
 
 
 
+  def generate_pca_error_comparison(self, pca_dimension_targets):
+    ### each pair in list is (full_data error, partial_data error)
+    x_i     = [ x for x in xrange(1,len(self.error_pairs["pca"][0])+1)]
+    y_full1 = [ y_pt[0] for y_pt in self.error_pairs["pca"][0] ]
 
-  def generate_pca_error_comparison(self, pca_dimension_target):
-    return 0
+    plt.hold(True)
+    plt.plot(x_i, y_full1, 'k', alpha=1.0, label='FULL')
+
+    alpha_values = [0.20,0.40,0.60,0.80,1.00]
+
+    for i in xrange(len(self.error_pairs["pca"])):
+      y_ = [ y_pt[1] for y_pt in self.error_pairs["pca"][i] ]
+      plt.plot(x_i, y_, 'r', alpha=alpha_values[i], label=str(pca_dimension_targets[i]))
+
+    plt.legend(loc='upper right')
+
+    plt.ylim(0.10,0.40)
+    plt.title("[Total Samples: "+str(self.sample_size)+"] | [Total Iterations: "+str(self.iters)+"]")
+    plt.xlabel("[Iteration #]")
+    plt.ylabel("[Total Error]")
+    plt.show()
 
 
-
-  # def train_random(self, size=10000, iters=20, reduction=0.10):
-  #   random_data_set = RandomDataSet(self.in_dim, self.out_dim, size)
-  #   all_data        = random_data_set.all_data
-  #   trn_data        = random_data_set.trn_data
-  #   tst_data        = random_data_set.tst_data
-  #   entro           = random_data_set.entro
-
-  #   random_data_set.create_kmeans_reduced_trn_data(k_reduction = reduction)
-  #   k_trn_data      = random_data_set.kmeans_trn_data
-
-  #   print "training on complete data set..."
-  #   trainer = BackpropTrainer(self.neural_net, dataset=trn_data, momentum=0.1, verbose=True, weightdecay=0.01)
-
-  #   print "training on kmeans reduced data set..."
-  #   k_trainer = BackpropTrainer(self.k_neural_net, dataset=k_trn_data, momentum=0.1, verbose=True, weightdecay=0.01)
-
-  #   for i in range(iters):
-
-  #     print "-------------------------"
-  #     trainer.trainEpochs(1)
-  #     print "---"
-  #     k_trainer.trainEpochs(1)
-
-  #     self.rmse_evaluation(tst_data, entro)
-  #     self.k_rmse_evaluation(tst_data, entro)
-
-  #   self.trainer   = trainer
-  #   self.k_trainer = k_trainer
 
   # def rmse_evaluation(self, tst_data, entropy):
   #   true_values = tst_data['target']
@@ -353,7 +384,14 @@ class RandomDataSet(object):
 
 
   def create_pca_data(self, pca_dimension_target=2):
-    return 0
+    pca_trn_data_x = PCA(n_components=pca_dimension_target).fit_transform(self.trn_data['input'])
+    pca_trn_data_y = self.trn_data['target']
+    pca_trn_data   = SupervisedDataSet(pca_dimension_target,self.out_dim)
+    for n in xrange(len(pca_trn_data_x)):
+      pca_trn_data.addSample(pca_trn_data_x[n], pca_trn_data_y[n])
+
+    self.pca_training_data = pca_trn_data
+
 
 
 
