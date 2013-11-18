@@ -164,10 +164,23 @@ class NeuralNet(object):
       self.create_pca_net(reduction, override=True)
       pca_trainer = BackpropTrainer(self.pca_net, dataset=pca_training_data, momentum=0.1, verbose=True, weightdecay=0.01)
 
+
+      ###################################
+      if reduction == 10:
+        for i in xrange(len(pca_training_data['input'])):
+          print "____________________________________________"
+          print training_data['input'][i]
+          print pca_training_data['input'][i]
+          print "||||||||||||||||||||||||||||||||||||||||||||"
+          print training_data['target'][i]
+          print pca_training_data['target'][i]
+          ########## USE RMSE AND SEE WHAT HAPPENS
+      ###################################
+
       full_pca_pair_errors = []
 
       for i in range(iters):
-        print "Reduction: " + str(reduction) + "Dimensions of Data, Iteration " + str(i)
+        print "Reduction: " + str(reduction) + " Dimensions of Data, Iteration " + str(i)
 
         old_stdout   = sys.stdout            ### CAPTURE
         capturer     = StringIO.StringIO()   ### CAPTURE
@@ -236,7 +249,7 @@ class NeuralNet(object):
 
     plt.legend(loc='upper right')
 
-    plt.ylim(0.10,0.40)
+    plt.ylim(0.00,0.40)
     plt.title("[Total Samples: "+str(self.sample_size)+"] | [Total Iterations: "+str(self.iters)+"]")
     plt.xlabel("[Iteration #]")
     plt.ylabel("[Total Error]")
@@ -384,6 +397,7 @@ class RandomDataSet(object):
 
 
   def create_pca_data(self, pca_dimension_target=2):
+    print "creating reduced pca dataset..."
     pca_trn_data_x = PCA(n_components=pca_dimension_target).fit_transform(self.trn_data['input'])
     pca_trn_data_y = self.trn_data['target']
     pca_trn_data   = SupervisedDataSet(pca_dimension_target,self.out_dim)
