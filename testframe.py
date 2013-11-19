@@ -35,7 +35,8 @@ class NeuralNet(object):
     self.k_means_net = None
     self.pca_net     = None
 
-    self.error_pairs = {"k-means":[],"pca":[],"k-pca":[]}
+    self.trn_error_pairs = {"k-means":[],"pca":[],"k-pca":[]}
+    self.tst_error_pairs = {"k-means":[],"pca":[],"k-pca":[]}
 
 
 
@@ -117,26 +118,32 @@ class NeuralNet(object):
       self.create_k_means_net(override=True)
       k_means_trainer = BackpropTrainer(self.k_means_net, dataset=k_means_training_data, momentum=0.1, verbose=True, weightdecay=0.01)
 
-      full_k_means_pair_errors = []
+      trn_k_means_pair_errors = []
+      tst_k_means_pair_errors = []
 
       for i in range(iters):
         print "Reduction: " + str(float(reduction)*100) + "% of Data, Iteration " + str(i)
 
-        old_stdout   = sys.stdout            ### CAPTURE
-        capturer     = StringIO.StringIO()   ### CAPTURE
-        sys.stdout   = capturer              ### CAPTURE
+        # old_stdout   = sys.stdout            ### CAPTURE
+        # capturer     = StringIO.StringIO()   ### CAPTURE
+        # sys.stdout   = capturer              ### CAPTURE
 
         #print "-------------------------"
         neural_trainer.trainEpochs(1)
         #print "---"
         k_means_trainer.trainEpochs(1)
 
-        sys.stdout   = old_stdout            ### CAPTURE
-        output       = capturer.getvalue()   ### CAPTURE
-        err_pair     = self.process_output_error_pair(output)
-        full_k_means_pair_errors.append(err_pair)
+        # sys.stdout   = old_stdout            ### CAPTURE
+        # output       = capturer.getvalue()   ### CAPTURE
+        # trn_err_pair = self.process_output_error_pair(output)
 
-      self.error_pairs["k-means"].append(full_k_means_pair_errors)
+        trn_err_pair = []
+        trn_err_pair.append(self.nrmsd_evaluation(training_data,"full"))
+        trn_err_pair.append(self.nrmsd_evaluation(k_means_training_data,"k-means"))
+
+        trn_k_means_pair_errors.append(tuple(trn_err_pair))
+
+      self.trn_error_pairs["k-means"].append(trn_k_means_pair_errors)
     self.generate_k_means_error_comparison(k_means_reductions)
 
 
@@ -177,26 +184,32 @@ class NeuralNet(object):
           ########## USE RMSE AND SEE WHAT HAPPENS
       ###################################
 
-      full_pca_pair_errors = []
+      trn_pca_pair_errors = []
+      tst_pca_pair_errors = []
 
       for i in range(iters):
         print "Reduction: " + str(reduction) + " Dimensions of Data, Iteration " + str(i)
 
-        old_stdout   = sys.stdout            ### CAPTURE
-        capturer     = StringIO.StringIO()   ### CAPTURE
-        sys.stdout   = capturer              ### CAPTURE
+        # old_stdout   = sys.stdout            ### CAPTURE
+        # capturer     = StringIO.StringIO()   ### CAPTURE
+        # sys.stdout   = capturer              ### CAPTURE
 
         #print "-------------------------"
         neural_trainer.trainEpochs(1)
         #print "---"
         pca_trainer.trainEpochs(1)
 
-        sys.stdout   = old_stdout            ### CAPTURE
-        output       = capturer.getvalue()   ### CAPTURE
-        err_pair     = self.process_output_error_pair(output)
-        full_pca_pair_errors.append(err_pair)
+        # sys.stdout   = old_stdout            ### CAPTURE
+        # output       = capturer.getvalue()   ### CAPTURE
+        # trn_err_pair = self.process_output_error_pair(output)
 
-      self.error_pairs["pca"].append(full_pca_pair_errors)
+        trn_err_pair = []
+        trn_err_pair.append(self.nrmsd_evaluation(training_data,"full"))
+        trn_err_pair.append(self.nrmsd_evaluation(pca_training_data,"pca"))
+
+        trn_pca_pair_errors.append(tuple(trn_err_pair))
+
+      self.trn_error_pairs["pca"].append(trn_pca_pair_errors)
     self.generate_pca_error_comparison(pca_reductions)
 
 
@@ -211,16 +224,16 @@ class NeuralNet(object):
 
   def generate_k_means_error_comparison(self, k_means_reductions):
     ### each pair in list is (full_data error, partial_data error)
-    x_i     = [ x for x in xrange(1,len(self.error_pairs["k-means"][0])+1)]
-    y_full1 = [ y_pt[0] for y_pt in self.error_pairs["k-means"][0] ]
+    x_i     = [ x for x in xrange(1,len(self.trn_error_pairs["k-means"][0])+1)]
+    y_full1 = [ y_pt[0] for y_pt in self.trn_error_pairs["k-means"][0] ]
 
     plt.hold(True)
     plt.plot(x_i, y_full1, 'k', alpha=1.0, label='1.00')
 
     alpha_values = [0.20,0.40,0.60,0.80,1.00]
 
-    for i in xrange(len(self.error_pairs["k-means"])):
-      y_ = [ y_pt[1] for y_pt in self.error_pairs["k-means"][i] ]
+    for i in xrange(len(self.trn_error_pairs["k-means"])):
+      y_ = [ y_pt[1] for y_pt in self.trn_error_pairs["k-means"][i] ]
       plt.plot(x_i, y_, 'r', alpha=alpha_values[i], label=str(k_means_reductions[i]))
 
     plt.legend(loc='upper right')
@@ -228,65 +241,56 @@ class NeuralNet(object):
     plt.ylim(0.10,0.40)
     plt.title("[Total Samples: "+str(self.sample_size)+"] | [Total Iterations: "+str(self.iters)+"]")
     plt.xlabel("[Iteration #]")
-    plt.ylabel("[Total Error]")
+    plt.ylabel("[Error]")
     plt.show()
 
 
 
   def generate_pca_error_comparison(self, pca_dimension_targets):
     ### each pair in list is (full_data error, partial_data error)
-    x_i     = [ x for x in xrange(1,len(self.error_pairs["pca"][0])+1)]
-    y_full1 = [ y_pt[0] for y_pt in self.error_pairs["pca"][0] ]
+    x_i     = [ x for x in xrange(1,len(self.trn_error_pairs["pca"][0])+1)]
+    y_full1 = [ y_pt[0] for y_pt in self.trn_error_pairs["pca"][0] ]
 
     plt.hold(True)
     plt.plot(x_i, y_full1, 'k', alpha=1.0, label='FULL')
 
     alpha_values = [0.20,0.40,0.60,0.80,1.00]
 
-    for i in xrange(len(self.error_pairs["pca"])):
-      y_ = [ y_pt[1] for y_pt in self.error_pairs["pca"][i] ]
+    for i in xrange(len(self.trn_error_pairs["pca"])):
+      y_ = [ y_pt[1] for y_pt in self.trn_error_pairs["pca"][i] ]
       plt.plot(x_i, y_, 'r', alpha=alpha_values[i], label=str(pca_dimension_targets[i]))
 
     plt.legend(loc='upper right')
 
-    plt.ylim(0.00,0.40)
+    #plt.ylim(0.00,1.00)
     plt.title("[Total Samples: "+str(self.sample_size)+"] | [Total Iterations: "+str(self.iters)+"]")
     plt.xlabel("[Iteration #]")
-    plt.ylabel("[Total Error]")
+    plt.ylabel("[Error]")
     plt.show()
 
 
 
-  # def rmse_evaluation(self, tst_data, entropy):
-  #   true_values = tst_data['target']
-  #   pred_values = []
+  def nrmsd_evaluation(self, data, net_type):
+    true_values = data['target']
+    pred_values = []
 
-  #   for ind in xrange(len(tst_data['target'])):
-  #     pred = self.net_activate(tst_data['input'][ind])
-  #     pred_values.append(pred)
+    data_len    = len(data['target'])
 
-  #   mse  = mean_squared_error(true_values, pred_values)
-  #   rmse = math.sqrt(mse)
-  #   normalized_rmse = rmse / entropy
+    for ind in xrange(data_len):
 
-  #   print "       RMSE: " + str(rmse)
-  #   print "Normd  RMSE: " + str(normalized_rmse)
+      if   net_type == "k-means":
+        pred = self.k_means_net_activate(data['input'][ind])
+      elif net_type == "pca":
+        pred = self.pca_net_activate(data['input'][ind])
+      else:
+        pred = self.net_activate(data['input'][ind])
 
-  # def k_rmse_evaluation(self, tst_data, entropy):
+      pred_values.append(pred)
 
-  #   true_values = tst_data['target']
-  #   pred_values = []
-
-  #   for ind in xrange(len(tst_data['target'])):
-  #     pred = self.k_net_activate(tst_data['input'][ind])
-  #     pred_values.append(pred)
-
-  #   mse  = mean_squared_error(true_values, pred_values)
-  #   rmse = math.sqrt(mse)
-  #   normalized_rmse = rmse / entropy
-
-  #   print "      KRMSE: " + str(rmse)
-  #   print "Normd KRMSE: " + str(normalized_rmse)
+    msd   = mean_squared_error(true_values, pred_values)
+    rmsd  = math.sqrt(msd)
+    nrmsd = float(rmsd) / data_len
+    return nrmsd
 
 
 
