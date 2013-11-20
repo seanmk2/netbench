@@ -3,12 +3,12 @@ import testframe
 in_size     = 10
 hidden_size = 50
 out_size    = 3
-num_samples = 25
+num_samples = 333
 
 my_net  = testframe.NeuralNet(in_size, hidden_size, out_size)
 my_data = testframe.RandomDataSet(in_size, out_size, num_samples)
 #my_net.train_many_k_means_reductions(my_data, iters=500, k_means_reductions=[0.01,0.03,0.10,0.30])
-my_net.train_many_pca_reductions(my_data, iters = 100, pca_reductions=[1,2,3,4,10])
+my_net.train_many_pca_reductions(my_data, iters = 333, pca_reductions=[1,2,3,4,10])
 
 ### add length of time to reduce data, vs. time to train reduced net
 ### also try naively taking data portions, compare to kmeans
@@ -18,6 +18,8 @@ my_net.train_many_pca_reductions(my_data, iters = 100, pca_reductions=[1,2,3,4,1
 ### train vs. test error on same graph, dash no dash
 ### investigate output function
 ### cut off for outliers outside of 3 std perhaps
+### also graph data in pca 2 dimenions
+### weighted k-means: bigger clusters contribute more sample points
 
 # conservative 1: density
 #              2: density * x velocity
