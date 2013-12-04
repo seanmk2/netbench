@@ -13,7 +13,9 @@ from sklearn.cluster             import KMeans
 from sklearn.preprocessing       import scale
 from sklearn.decomposition       import PCA
 from scipy                       import diag, arange, meshgrid, where
+from scipy                       import stats
 from scipy.spatial.distance      import pdist
+from collections                 import Counter
 
 import sys
 import copy
@@ -21,6 +23,10 @@ import math
 import random
 import StringIO
 import matplotlib.pyplot as plt
+
+
+
+# TODO: explore use of neurolab if pybrain does not yield good results
 
 
 
@@ -95,15 +101,46 @@ class NeuralNet(object):
 
 
 
-  def train_many_k_means_reductions(self, dataset, portion=1.00, iters=20, k_means_reductions=[ float(num)/10 for num in xrange(1,10) ]):
+  def keep_data_within_bounds(self, training_data, lower, upper):
+    # TODO: make sure this is working
+    if len(training_data['target'][0]) > 1:
+      print "Output dimension greater than 1, returning data unmodified (intended only for 1-D output)."
+      return training_data
+    else:
+      in_dim    = len(training_data['input'][0])
+      out_dim   = len(training_data['target'][0])
+      new_train_x_data = []
+      new_train_y_data = []
+      discarded_data = 0
+      total_data = len(training_data['target'])
+      for ind in xrange(len(training_data['target'])):
+        if training_data['target'][ind] > lower and training_data['target'][ind] < upper:
+          new_train_x_data.append(training_data['input'][ind])
+          new_train_y_data.append(training_data['target'][ind])
+        else:
+          discarded_data += 1
+
+      training_data = SupervisedDataSet(in_dim, out_dim)
+      for n in xrange(len(new_train_x_data)):
+        training_data.addSample(new_train_x_data[n], new_train_y_data[n])
+      print str(discarded_data) + " number of samples discarded out of " + str(total_data)
+      return training_data
+
+
+  def train_many_k_means_reductions(self, dataset, portion=1.00, iters=20, k_means_reductions=[ float(num)/10 for num in xrange(1,10) ], outlier_cutoff=0):
     if portion >= 1:
-      training_data   = dataset.trn_data
-      test_data       = dataset.tst_data
+      training_data   = copy.deepcopy(dataset.trn_data)
+      test_data       = copy.deepcopy(dataset.tst_data)
     if portion < 1:
       dataset.get_portion(portion)
-      training_data   = dataset.portion["training"]
-      test_data       = dataset.portion["test"]
+      training_data   = copy.deepcopy(dataset.portion["training"])
+      test_data       = copy.deepcopy(dataset.portion["test"])
     entro = dataset.entro
+
+    if outlier_cutoff > 0.0:
+      low_bound = stats.scoreatpercentile(training_data['target'], outlier_cutoff)
+      up_bound  = stats.scoreatpercentile(training_data['target'], 100 - outlier_cutoff)
+      training_data = self.keep_data_within_bounds(training_data, low_bound, up_bound)
 
     self.iters        = iters
     self.sample_size  = dataset.tot_size
@@ -148,15 +185,21 @@ class NeuralNet(object):
 
 
 
-  def train_many_pca_reductions(self, dataset, portion=1.00, iters=20, pca_reductions=[ num for num in xrange(3,7) ]):
+  def train_many_pca_reductions(self, dataset, portion=1.00, iters=20, pca_reductions=[ num for num in xrange(3,7) ], outlier_cutoff=0):
+    # TODO: option for cutting off outliers, using scipy stats
     if portion >= 1:
-      training_data   = dataset.trn_data
-      test_data       = dataset.tst_data
+      training_data   = copy.deepcopy(dataset.trn_data)
+      test_data       = copy.deepcopy(dataset.tst_data)
     if portion < 1:
       dataset.get_portion(portion)
-      training_data   = dataset.portion["training"]
-      test_data       = dataset.portion["test"]
+      training_data   = copy.deepcopy(dataset.portion["training"])
+      test_data       = copy.deepcopy(dataset.portion["test"])
     entro = dataset.entro
+
+    if outlier_cutoff > 0.0:
+      low_bound = stats.scoreatpercentile(training_data['target'], outlier_cutoff)
+      up_bound  = stats.scoreatpercentile(training_data['target'], 100 - outlier_cutoff)
+      training_data = self.keep_data_within_bounds(training_data, low_bound, up_bound)
 
     self.iters        = iters
     self.sample_size  = dataset.tot_size
@@ -224,6 +267,7 @@ class NeuralNet(object):
 
   def generate_k_means_error_comparison(self, k_means_reductions):
     ### each pair in list is (full_data error, partial_data error)
+    # TODO: graph training and testing error on same plot, dashed vs. solid lines
     x_i     = [ x for x in xrange(1,len(self.trn_error_pairs["k-means"][0])+1)]
     y_full1 = [ y_pt[0] for y_pt in self.trn_error_pairs["k-means"][0] ]
 
@@ -238,7 +282,8 @@ class NeuralNet(object):
 
     plt.legend(loc='upper right')
 
-    plt.ylim(0.10,0.40)
+    # TODO: adaptive ylim for error
+    #plt.ylim(0.10,0.40)
     plt.title("[Total Samples: "+str(self.sample_size)+"] | [Total Iterations: "+str(self.iters)+"]")
     plt.xlabel("[Iteration #]")
     plt.ylabel("[Error]")
@@ -248,6 +293,7 @@ class NeuralNet(object):
 
   def generate_pca_error_comparison(self, pca_dimension_targets):
     ### each pair in list is (full_data error, partial_data error)
+    # TODO: graph training and testing error on same plot, dashed vs. solid lines
     x_i     = [ x for x in xrange(1,len(self.trn_error_pairs["pca"][0])+1)]
     y_full1 = [ y_pt[0] for y_pt in self.trn_error_pairs["pca"][0] ]
 
@@ -262,6 +308,7 @@ class NeuralNet(object):
 
     plt.legend(loc='upper right')
 
+    # TODO: adaptive ylim for error
     #plt.ylim(0.00,1.00)
     plt.title("[Total Samples: "+str(self.sample_size)+"] | [Total Iterations: "+str(self.iters)+"]")
     plt.xlabel("[Iteration #]")
@@ -270,7 +317,14 @@ class NeuralNet(object):
 
 
 
+  def graph_pca_reduced_data_heatmap(self, target_data):
+    # TODO: implement this to graph reduced data
+    return None
+
+
+
   def nrmsd_evaluation(self, data, net_type):
+    # TODO: explore some actual predicted outputs from given inputs, sanity check to make sure it is "close"
     true_values = data['target']
     pred_values = []
 
@@ -321,6 +375,7 @@ class RandomDataSet(object):
     self.covas = covas
     self.entro = entro
 
+    # TODO: investigate what the output function actually looks like
     all_data = SupervisedDataSet(in_dim, out_dim)
     for n in xrange(size):
       in_datum  = multivariate_normal(means,covas)
@@ -367,6 +422,19 @@ class RandomDataSet(object):
     kmeans_trn_data_x = []
     kmeans_trn_data_y = []
 
+    # TODO: analyze to see if it matters to use a weighted k means sampling type algorithm or not
+    print kmeans.cluster_centers_ ##################################
+    print kmeans.labels_ ###########################################
+
+    count_dict = Counter()
+    total_coun = 0
+    for val in kmeans.labels_:
+      count_dict[val] += 1
+      total_coun += 1
+
+    print count_dict ###############################################
+    print total_coun ###############################################
+
     print "finding closest point to each centroid..."
     centroid_count = 0
 
@@ -410,7 +478,9 @@ class RandomDataSet(object):
 
     self.pca_training_data = pca_trn_data
 
-
+  def extract_turbulence_data(self, target_file):
+    # TODO: implement this function to make use of Brendan's data
+    return None
 
 
 
