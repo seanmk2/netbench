@@ -17,6 +17,7 @@ from scipy                       import stats
 from scipy.spatial.distance      import pdist
 from collections                 import Counter
 
+import re
 import sys
 import copy
 import math
@@ -186,7 +187,6 @@ class NeuralNet(object):
 
 
   def train_many_pca_reductions(self, dataset, portion=1.00, iters=20, pca_reductions=[ num for num in xrange(3,7) ], outlier_cutoff=0):
-    # TODO: option for cutting off outliers, using scipy stats
     if portion >= 1:
       training_data   = copy.deepcopy(dataset.trn_data)
       test_data       = copy.deepcopy(dataset.tst_data)
@@ -478,8 +478,18 @@ class RandomDataSet(object):
 
     self.pca_training_data = pca_trn_data
 
-  def extract_turbulence_data(self, target_file):
+  def extract_turbulence_data(self, target_file_name):
     # TODO: implement this function to make use of Brendan's data
+    reynolds_base = re.findall(r'[0-9]+', target_file_name)
+    reynolds_base = int(reynolds_base[0])
+    self.reynolds_number = reynolds_base * 100000
+
+    f = open(target_file_name, 'r')
+
+    input_data  = []
+    target_data = []
+    for line in f.readlines():
+      ###
     return None
 
 
