@@ -277,6 +277,8 @@ class NeuralNet(object):
     alpha_values = [0.20,0.40,0.60,0.80,1.00]
 
     for i in xrange(len(self.trn_error_pairs["k-means"])):
+      print i ##################
+      # TODO: fix indexing error
       y_ = [ y_pt[1] for y_pt in self.trn_error_pairs["k-means"][i] ]
       plt.plot(x_i, y_, 'r', alpha=alpha_values[i], label=str(k_means_reductions[i]))
 
@@ -349,6 +351,7 @@ class NeuralNet(object):
 
 
 class RandomDataSet(object):
+  # TODO: reorganize to dataset class, create random or extract real data subfunctions
   def __init__(self, in_dim, out_dim, size = 1000, means = None, covas = None, split_proportion=0.25):
     if means == None or covas == None:
       means = []
@@ -426,6 +429,7 @@ class RandomDataSet(object):
     print kmeans.cluster_centers_ ##################################
     print kmeans.labels_ ###########################################
 
+    # TODO: graph weighted k means count dict as histogram to see if distribution matters
     count_dict = Counter()
     total_coun = 0
     for val in kmeans.labels_:
@@ -478,19 +482,77 @@ class RandomDataSet(object):
 
     self.pca_training_data = pca_trn_data
 
-  def extract_turbulence_data(self, target_file_name):
-    # TODO: implement this function to make use of Brendan's data
+  def extract_turbulence_data(self, target_file_name, desired_input=["ExtraOutput_4","ExtraOutput_5","ExtraOutput_6","ExtraOutput_7","ExtraOutput_8","ExtraOutput_9","ExtraOutput_10","ExtraOutput_11","ExtraOutput_12"], desired_target=["ExtraOutput_1","ExtraOutput_2","ExtraOutput_3"]): # add target function input that acts on target mapping to create value
+    # TODO: add real commenting everywhere instead of pound signs
+    '''
+    Takes turbulence data filename, desired input parameters, target
+    parameters, and a target construction function (if one wants to
+    create a target value with target parameters), and stores data as
+    a supervised dataset.
+
+    # conservative 01: density
+    #              02: density * x velocity
+    #              03: density * y velocity
+    #              04: density * z velocity
+    #              05: nu tilda
+
+    # extra output 01: turbulent production
+    #              02: turbulent destruction
+    #              03: turbulent cross production
+    #              04: nu (normal kinematic viscosity)
+    #              05: nu tilda
+    #              06: wall distance
+    #              07: d nu tilda dx
+    #              08: d nu tilda dy
+    #              09: du/dx
+    #              10: du/dy
+    #              11: dv/dx
+    #              12: dv/dy
+    #              13: 1 - 2 + 3 (constructed) as function of 4 <-> 12
+
+    # dimensions-> (9) input, (1) output
+    '''
     reynolds_base = re.findall(r'[0-9]+', target_file_name)
     reynolds_base = int(reynolds_base[0])
     self.reynolds_number = reynolds_base * 100000
 
     f = open(target_file_name, 'r')
+    key_line  = f.readline()
+    key_names = key_line.strip().split('\t')
+    key_names = [ key_name[1:-1] for key_name in key_names ]
+
+    input_mapping  = [ key_names.index(term) for term in desired_input ]
+    target_mapping = [ key_names.index(term) for term in desired_target ]
 
     input_data  = []
     target_data = []
     for line in f.readlines():
-      ###
-    return None
+      values = line.strip().split('\t')
+      values = [ float(value) for value in values ]
+      inp    = [ values[ind] for ind in input_mapping ]
+      tgt    = [ values[ind] for ind in target_mapping ]
+      tgt    = [ tgt[0] - tgt[1] + tgt[2] ]
+      input_data.append(inp)
+      target_data.append(tgt) # TODO: apply a target formation function instead
+    f.close()
+
+    self.in_dim   = len(input_data[0])
+    self.out_dim  = len(target_data[0])
+    self.tot_size = len(target_data)
+
+    all_data = SupervisedDataSet(self.in_dim, self.out_dim)
+    for ind in xrange(self.tot_size):
+      in_datum  = input_data[ind]
+      out_datum = target_data[ind]
+      all_data.addSample(in_datum,out_datum)
+
+    tst_data, trn_data = all_data.splitWithProportion(self.split_proportion)
+
+    self.all_data = all_data
+    self.tst_data = tst_data
+    self.trn_data = trn_data
+    self.portion  = {"training":None,"test":None}
+
 
 
 
