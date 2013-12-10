@@ -11,12 +11,14 @@ from numpy.linalg                import det
 from sklearn.metrics             import mean_squared_error
 from sklearn.cluster             import KMeans
 from sklearn.preprocessing       import scale
+from sklearn.preprocessing       import normalize
 from sklearn.decomposition       import PCA
 from scipy                       import diag, arange, meshgrid, where
 from scipy                       import stats
 from scipy.spatial.distance      import pdist
 from collections                 import Counter
 
+import numpy as np
 import re
 import sys
 import copy
@@ -176,8 +178,11 @@ class NeuralNet(object):
         # trn_err_pair = self.process_output_error_pair(output)
 
         trn_err_pair = []
-        trn_err_pair.append(self.nrmsd_evaluation(training_data,"full"))
-        trn_err_pair.append(self.nrmsd_evaluation(k_means_training_data,"k-means"))
+        # trn_err_pair.append(self.nrmsd_evaluation(training_data,"full"))
+        # trn_err_pair.append(self.nrmsd_evaluation(k_means_training_data,"k-means"))
+
+        trn_err_pair.append(self.nrmsd_evaluation(test_data,"full"))
+        trn_err_pair.append(self.nrmsd_evaluation(test_data,"k-means"))
 
         trn_k_means_pair_errors.append(tuple(trn_err_pair))
 
@@ -319,6 +324,117 @@ class NeuralNet(object):
 
 
 
+  def generate_test_output_comparison(self, train_data, test_data, iters=10):
+    print len(train_data['input'])
+    print len(test_data['input'])
+
+    self.create_net(in_size=self.in_dim,hidden_size=self.hidden_dim,out_size=self.out_dim,override=True)
+    neural_trainer = BackpropTrainer(self.neural_net, dataset=train_data, momentum=0.1, verbose=True, weightdecay=0.01)
+    for i in range(iters):
+      neural_trainer.trainEpochs(1)
+
+    plt.hold(True)
+    for ind in xrange(len(test_data['target'])):
+      trueOutput = test_data['target'][ind]
+      predOutput = self.net_activate(test_data['input'][ind])
+
+      if ind < 10:
+        print str(trueOutput)+" vs. "+str(predOutput)
+
+      if ind % 10 == 0:
+        plt.hold(True)
+        plt.plot(trueOutput, predOutput, 'kx')
+
+    # plt.ylim(-.25,.25)
+    # plt.xlim(-.0000001,.0000001)
+    plt.title("Output Comparison")
+    plt.xlabel("True Output")
+    plt.ylabel("Predicted Output")
+
+    print self.nrmsd_evaluation(test_data, "main_net")
+    plt.show()
+
+
+
+  def generate_k_means_baseline_comparisons(self, dataset, k_reduction, iters=20):
+    test_data       = copy.deepcopy(dataset.tst_data)
+    train_size      = len(dataset.trn_data['target'])
+    sub_portion     = int(k_reduction * train_size)
+    iterations      = [ it+1 for it in range(iters) ]
+
+    training_data   = copy.deepcopy(dataset.trn_data)
+    self.create_net(in_size=self.in_dim,hidden_size=self.hidden_dim,out_size=self.out_dim,override=True)
+    full_neural_trainer = BackpropTrainer(self.neural_net, dataset=training_data, momentum=0.1, verbose=True, weightdecay=0.01)
+
+    full_data_error = [[],[]]
+    for i in range(iters):
+      full_neural_trainer.trainEpochs(1)
+      full_data_error[0].append(self.nrmsd_evaluation(training_data,"full"))
+      full_data_error[1].append(self.nrmsd_evaluation(test_data,"full"))
+
+    dataset.create_k_means_data(k_means_reduction=k_reduction)
+    k_means_training_data = dataset.k_means_training_data
+    self.create_k_means_net(override=True)
+    k_means_trainer = BackpropTrainer(self.k_means_net, dataset=k_means_training_data, momentum=0.1, verbose=True, weightdecay=0.01)
+
+    k_means_data_error = [[],[]]
+    for i in range(iters):
+      k_means_trainer.trainEpochs(1)
+      k_means_data_error[0].append(self.nrmsd_evaluation(k_means_training_data,"k-means"))
+      k_means_data_error[1].append(self.nrmsd_evaluation(test_data,"k-means"))
+
+    random_indices = random.sample(range(train_size), sub_portion)
+    random_training_data = SupervisedDataSet(self.in_dim, self.out_dim)
+    for ind in random_indices:
+      in_datum  = training_data['input'][ind]
+      out_datum = training_data['target'][ind]
+      random_training_data.addSample(in_datum,out_datum)
+    self.create_net(in_size=self.in_dim,hidden_size=self.hidden_dim,out_size=self.out_dim,override=True)
+    random_neural_trainer = BackpropTrainer(self.neural_net, dataset=random_training_data, momentum=0.1, verbose=True, weightdecay=0.01)
+
+    random_data_error = [[],[]]
+    for i in range(iters):
+      random_neural_trainer.trainEpochs(1)
+      random_data_error[0].append(self.nrmsd_evaluation(random_training_data,"random"))
+      random_data_error[1].append(self.nrmsd_evaluation(test_data,"random"))
+
+    early_indices = range(train_size)[0:sub_portion]
+    early_training_data = SupervisedDataSet(self.in_dim, self.out_dim)
+    for ind in early_indices:
+      in_datum  = training_data['input'][ind]
+      out_datum = training_data['target'][ind]
+      early_training_data.addSample(in_datum,out_datum)
+    self.create_net(in_size=self.in_dim,hidden_size=self.hidden_dim,out_size=self.out_dim,override=True)
+    early_neural_trainer = BackpropTrainer(self.neural_net, dataset=early_training_data, momentum=0.1, verbose=True, weightdecay=0.01)
+
+    early_data_error = [[],[]]
+    for i in range(iters):
+      early_neural_trainer.trainEpochs(1)
+      early_data_error[0].append(self.nrmsd_evaluation(early_training_data,"early"))
+      early_data_error[1].append(self.nrmsd_evaluation(test_data,"early"))
+
+    plt.hold(True)
+
+    plt.plot(iterations, full_data_error[0], 'k--', label="FULL_TRAIN")
+    plt.plot(iterations, k_means_data_error[0], 'r--', label="KMEANS_TRAIN")
+    plt.plot(iterations, random_data_error[0], 'b--', label="RANDOM_TRAIN")
+    plt.plot(iterations, early_data_error[0], 'm--', label="EARLY_TRAIN")
+
+    plt.plot(iterations, full_data_error[1], 'k-', label="FULL_TEST")
+    plt.plot(iterations, k_means_data_error[1], 'r-', label="KMEANS_TEST")
+    plt.plot(iterations, random_data_error[1], 'b-', label="RANDOM_TEST")
+    plt.plot(iterations, early_data_error[1], 'm-', label="EARLY_TEST")
+
+    plt.legend(loc='upper right')
+    # plt.ylim()
+    # plt.xlim()
+    plt.title("Error Comparison for Reduction="+str(k_reduction))
+    plt.xlabel("Iteration")
+    plt.ylabel("Normalized Prediction Error")
+    plt.show()
+
+
+
   def graph_pca_reduced_data_heatmap(self, target_data):
     # TODO: implement this to graph reduced data
     return None
@@ -331,22 +447,35 @@ class NeuralNet(object):
     pred_values = []
 
     data_len    = len(data['target'])
-
+    prediction_errors = []
     for ind in xrange(data_len):
-
+      trueVal = data['target'][ind]
       if   net_type == "k-means":
-        pred = self.k_means_net_activate(data['input'][ind])
+        predVal = self.k_means_net_activate(data['input'][ind])
       elif net_type == "pca":
-        pred = self.pca_net_activate(data['input'][ind])
+        predVal = self.pca_net_activate(data['input'][ind])
       else:
-        pred = self.net_activate(data['input'][ind])
+        predVal = self.net_activate(data['input'][ind])
 
-      pred_values.append(pred)
 
-    msd   = mean_squared_error(true_values, pred_values)
-    rmsd  = math.sqrt(msd)
-    nrmsd = float(rmsd) / data_len
-    return nrmsd
+      if ind < 10:
+        print str(trueVal)+" vs. "+str(predVal)
+
+      prediction_error = pdist([predVal,trueVal])
+      prediction_errors.append(prediction_error)
+      # pred_values.append(predVal)
+
+
+    # msd   = mean_squared_error(true_values, pred_values)
+    # rmsd  = math.sqrt(msd)
+    # nrmsd = float(rmsd) / 1#data_len
+
+    # return nrmsd
+
+    if len(data['target'][0]) > 1:
+      return float(sum(prediction_errors)) / data_len
+    else:
+      return (float(sum(prediction_errors))/data_len) / float(max(data['target']) - min(data['target']))
 
 
 
@@ -428,7 +557,8 @@ class RandomDataSet(object):
     # TODO: analyze to see if it matters to use a weighted k means sampling type algorithm or not
     print kmeans.cluster_centers_ ##################################
     print kmeans.labels_ ###########################################
-
+    print len(centroids)
+    print len(kmeans.labels_)
     # TODO: graph weighted k means count dict as histogram to see if distribution matters
     count_dict = Counter()
     total_coun = 0
@@ -444,7 +574,8 @@ class RandomDataSet(object):
 
     indices = []
 
-    for centroid in centroids:
+    for c in range(len(centroids)):
+      centroid = centroids[c]
 
       centroid_count += 1
       if centroid_count % (k_clusters / 5) == 0:
@@ -482,7 +613,7 @@ class RandomDataSet(object):
 
     self.pca_training_data = pca_trn_data
 
-  def extract_turbulence_data(self, target_file_name, desired_input=["ExtraOutput_4","ExtraOutput_5","ExtraOutput_6","ExtraOutput_7","ExtraOutput_8","ExtraOutput_9","ExtraOutput_10","ExtraOutput_11","ExtraOutput_12"], desired_target=["ExtraOutput_1","ExtraOutput_2","ExtraOutput_3"]): # add target function input that acts on target mapping to create value
+  def extract_turbulence_data(self, target_file_name, permute=True, normalized=False, desired_input=["ExtraOutput_4","ExtraOutput_5","ExtraOutput_6","ExtraOutput_7","ExtraOutput_8","ExtraOutput_9","ExtraOutput_10","ExtraOutput_11","ExtraOutput_12"], desired_target=["ExtraOutput_1","ExtraOutput_2","ExtraOutput_3"], low_bound=0, up_bound=100): # add target function input that acts on target mapping to create value
     # TODO: add real commenting everywhere instead of pound signs
     '''
     Takes turbulence data filename, desired input parameters, target
@@ -536,14 +667,44 @@ class RandomDataSet(object):
       target_data.append(tgt) # TODO: apply a target formation function instead
     f.close()
 
-    self.in_dim   = len(input_data[0])
-    self.out_dim  = len(target_data[0])
-    self.tot_size = len(target_data)
+    if permute:
+      random.seed(37)
+      random.shuffle(input_data)
+      random.seed(37)
+      random.shuffle(target_data)
+
+    input_data = np.array(input_data)
+    target_data = np.array(target_data)
+
+    lower_limit = min(target_data)
+    upper_limit = max(target_data)
+    print "Spread = "+str(upper_limit-lower_limit)
+    if low_bound > 0:
+      lower_limit = stats.scoreatpercentile(target_data, low_bound)
+
+    if up_bound < 100:
+      upper_limit = stats.scoreatpercentile(target_data, up_bound)
+
+    new_input_data = []
+    new_target_data = []
+
+    for i in xrange(len(target_data)):
+      if target_data[i] < upper_limit and target_data[i] > lower_limit:
+        new_input_data.append(input_data[i])
+        new_target_data.append(target_data[i])
+
+    if normalized:
+      normalize(new_input_data)
+
+    self.in_dim   = len(new_input_data[0])
+    self.out_dim  = len(new_target_data[0])
+    self.tot_size = len(new_target_data)
+    print "Total Data Extracted: "+str(self.tot_size)
 
     all_data = SupervisedDataSet(self.in_dim, self.out_dim)
     for ind in xrange(self.tot_size):
-      in_datum  = input_data[ind]
-      out_datum = target_data[ind]
+      in_datum  = new_input_data[ind]
+      out_datum = new_target_data[ind]
       all_data.addSample(in_datum,out_datum)
 
     tst_data, trn_data = all_data.splitWithProportion(self.split_proportion)
@@ -561,8 +722,22 @@ class RandomDataSet(object):
 
 
 
-
-
+# http://jmlr.org/papers/volume11/ojala10a/ojala10a.pdf
+# http://archive.bio.ed.ac.uk/jdeacon/statistics/tress2.html
+# http://nlp.stanford.edu/courses/NAACL2013/NAACL2013-Socher-Manning-DeepLearning.pdf
+# http://cs229.stanford.edu/materials/ML-advice.pdf
+# http://yann.lecun.com/exdb/publis/pdf/hadsell-iros-08.pdf
+# http://www.scientificamerican.com/article.cfm?id=autonomous-driverless-car-brain
+# http://www.cais.ntu.edu.sg/~chhoi/libol/LIBOL.pdf
+# http://www.kent.ac.uk/careers/interviews/ivscience.htm
+# http://www.cs.stanford.edu/people/dstavens/thesis/David_Stavens_PhD_Dissertation.pdf
+# http://www.stanford.edu/~rrwill/teaching-acm.pdf
+# http://jmlr.org/papers/volume11/bifet10a/bifet10a.pdf
+# http://i.stanford.edu/~ullman/mmds/ch4.pdf
+# http://static.googleusercontent.com/media/research.google.com/en/us/pubs/archive/36296.pdf
+# http://cs229.stanford.edu/notes/cs229-notes12.pdf
+# https://www.stanford.edu/class/cs221/restricted/car/index.html
+# http://www.artofmanliness.com/2011/02/02/lessons-in-manliness-from-atticus-finch/
 
 
 
